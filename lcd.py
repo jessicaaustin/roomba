@@ -4,12 +4,48 @@
 import os, sys
 import create
 import time
+import thread
+import select
+import tty
+import termios
+import atexit
 
 
 ROOMBA_PORT='/dev/ttyAMA0'
 
 robot = create.Create(ROOMBA_PORT, BAUD_RATE=115200)
 robot.toSafeMode()
+
+MAX_FORWARD = 50 # in cm per second
+MAX_ROTATION = 200 # in cm per second
+SPEED_INC = 5 # increment cm/s 
+ROT_INC = 20 # increment in cm/s
+
+# non-blocking console input code from http://stackoverflow.com/a/32382950
+old_settings=None
+
+def init_anykey():
+   global old_settings
+   old_settings = termios.tcgetattr(sys.stdin)
+   new_settings = termios.tcgetattr(sys.stdin)
+   new_settings[3] = new_settings[3] & ~(termios.ECHO | termios.ICANON) # lflags
+   new_settings[6][termios.VMIN] = 0  # cc
+   new_settings[6][termios.VTIME] = 0 # cc
+   termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
+
+@atexit.register
+def term_anykey():
+   global old_settings
+   if old_settings:
+      termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+def anykey():
+   ch_set = []
+   ch = os.read(sys.stdin.fileno(), 1)
+   while ch != None and len(ch) > 0:
+      ch_set.append( ord(ch[0]) )
+      ch = os.read(sys.stdin.fileno(), 1)
+   return ch_set[0] if len(ch_set) > 0 else None
 
 
 def modeStr( mode ):
@@ -67,7 +103,6 @@ def commandStr( vel, rot):
 
 
 def lcd( mode, command ):
-    
     output = '|{:.4}| {:.9}\n________________'.format(mode, command)
     print('----------------')
     print(output)
@@ -76,54 +111,48 @@ def lcd( mode, command ):
 
 def main():
 
+    init_anykey()
+
     robot.resetPose()
     robot.printSensors()
 
-    print('\ndo nothing')
     fwd_speed = 0
     rot_speed = 0
-    robot.go(fwd_speed, rot_speed)
 
-    time.sleep(1)
-    senses = robot.sensors([create.OI_MODE])
-    mode = modeStr(senses[create.OI_MODE])
-    command = commandStr(fwd_speed, rot_speed)
-    lcd(mode, command)
+    while True:
 
-    print('\nturn right')
-    fwd_speed = 0
-    rot_speed = -150
-    robot.go(fwd_speed, rot_speed)
+        key = anykey()
+        if key != None:
+            if key == 32:  # spacebar / STOP
+                fwd_speed = 0
+                rot_speed = 0
+            elif key == 119:  # w / increase speed
+                fwd_speed += SPEED_INC
+                if fwd_speed > MAX_FORWARD:
+                    fwd_speed = MAX_FORWARD
+            elif key == 115:  # s / decrease speed
+                fwd_speed -= SPEED_INC
+                if fwd_speed < -1*MAX_FORWARD:
+                    fwd_speed = -1*MAX_FORWARD
+            elif key == 97:  # a / turn left
+                rot_speed += ROT_INC
+                if rot_speed > MAX_ROTATION:
+                    fwd_speed = MAX_ROTATION
+            elif key == 100:  # d / turn right
+                rot_speed -= ROT_INC
+                if rot_speed < -1*MAX_ROTATION:
+                    fwd_speed = -1*MAX_ROTATION
+            else:
+                pass
 
-    time.sleep(1)
-    senses = robot.sensors([create.OI_MODE])
-    mode = modeStr(senses[create.OI_MODE])
-    command = commandStr(fwd_speed, rot_speed)
-    lcd(mode, command)
+        robot.go(fwd_speed, rot_speed)
 
-    print('\ngo straight')
-    fwd_speed = 25
-    rot_speed = 0
-    robot.go(fwd_speed, rot_speed)
+        senses = robot.sensors([create.OI_MODE])
+        mode = modeStr(senses[create.OI_MODE])
+        command = commandStr(fwd_speed, rot_speed)
+        lcd(mode, command)
 
-    time.sleep(1)
-    senses = robot.sensors([create.OI_MODE])
-    mode = modeStr(senses[create.OI_MODE])
-    command = commandStr(fwd_speed, rot_speed)
-    lcd(mode, command)
-
-    print('\nturn left')
-    fwd_speed = 10
-    rot_speed = 50
-    robot.go(fwd_speed, rot_speed)
-
-    time.sleep(1)
-    senses = robot.sensors([create.OI_MODE])
-    mode = modeStr(senses[create.OI_MODE])
-    command = commandStr(fwd_speed, rot_speed)
-    lcd(mode, command)
-
-
+        time.sleep(0.1)
 
 		
 if __name__ == '__main__': 
