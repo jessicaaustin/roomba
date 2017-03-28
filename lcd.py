@@ -2,6 +2,7 @@
 # lcd.py
 #
 import os, sys
+import subprocess
 import create
 import time
 import thread
@@ -102,8 +103,7 @@ def commandStr( vel, rot):
     return '{:.3}{:.3}{:.3}'.format(leftTurn, speedStr, rightTurn)
 
 
-def lcd( mode, command ):
-    output = '|{:.4}| {:.9}\n________________'.format(mode, command)
+def lcd( output ):
     print('----------------')
     print(output)
     print('----------------')
@@ -112,17 +112,25 @@ def lcd( mode, command ):
 def main():
 
     init_anykey()
+    has_pressed_a_key = False
 
-    robot.resetPose()
-    robot.printSensors()
+    #robot.resetPose()
+    #robot.printSensors()
+
+    robot.playNote(70, 10)
+    robot.playNote(74, 20)
 
     fwd_speed = 0
     rot_speed = 0
+
+    ssid = subprocess.check_output(['iwgetid', '-r']).strip()
+    ipaddr = subprocess.check_output(['hostname', '-I']).strip()
 
     while True:
 
         key = anykey()
         if key != None:
+            has_pressed_a_key = True
             if key == 32:  # spacebar / STOP
                 fwd_speed = 0
                 rot_speed = 0
@@ -150,7 +158,12 @@ def main():
         senses = robot.sensors([create.OI_MODE])
         mode = modeStr(senses[create.OI_MODE])
         command = commandStr(fwd_speed, rot_speed)
-        lcd(mode, command)
+
+        if has_pressed_a_key:
+            output = '|{:.4}| {:.9}\n________________'.format(mode, command)
+            lcd(output)
+        else:
+            lcd('{:.16}\n{:.16}'.format(ssid, ipaddr))
 
         time.sleep(0.1)
 
