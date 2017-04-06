@@ -10,12 +10,17 @@ import select
 import tty
 import termios
 import atexit
+import Adafruit_CharLCD as LCD
 
 
 ROOMBA_PORT='/dev/ttyAMA0'
 
 robot = create.Create(ROOMBA_PORT, BAUD_RATE=115200)
 robot.toSafeMode()
+
+# Initialize the LCD using the pins
+lcd_plate = LCD.Adafruit_CharLCDPlate()
+prev_lcd_msg = 'Loading...'
 
 MAX_FORWARD = 50 # in cm per second
 MAX_ROTATION = 200 # in cm per second
@@ -60,53 +65,59 @@ def modeStr( mode ):
 def commandStr( vel, rot):
     """ vel: (-50 to 50) => (vvv to ^^^) """
     """ rot: (-200 to 200) => (>>> to <<<) """
+    """ NOTE: the lcd was installed upside-down """
 
     speed = vel / 50.0 * 3.0
     if speed > 2.5:
-        speedStr = '^^^'
-    elif speed >= 1:
-        speedStr = '_^^'
-    elif speed > 0.01:
-        speedStr = '_^_'
-    elif speed < -2.5:
         speedStr = 'vvv'
-    elif speed <= -1:
+    elif speed >= 1:
         speedStr = '_vv'
-    elif speed < -0.01:
+    elif speed > 0.01:
         speedStr = '_v_'
+    elif speed < -2.5:
+        speedStr = '^^^'
+    elif speed <= -1:
+        speedStr = '_^^'
+    elif speed < -0.01:
+        speedStr = '_^_'
     else:
         speedStr = '___'
 
     turn = rot / 200.0 * 3.0
     if turn > 2.5:
-        leftTurn  = '<<<' 
+        leftTurn  = '>>>' 
         rightTurn = '___' 
     elif turn >= 1:
-        leftTurn  = '<<_' 
+        leftTurn  = '_>>' 
         rightTurn = '___' 
     elif turn > 0.01:
-        leftTurn  = '<__' 
+        leftTurn  = '__>' 
         rightTurn = '___' 
     elif turn < -2.5:
         leftTurn  = '___' 
-        rightTurn = '>>>' 
+        rightTurn = '<<<' 
     elif turn <= -1:
         leftTurn  = '___' 
-        rightTurn = '_>>' 
+        rightTurn = '<<_' 
     elif turn < -0.01:
         leftTurn  = '___' 
-        rightTurn = '__>' 
+        rightTurn = '<__' 
     else:
         leftTurn  = '___'
         rightTurn = '___'
  
-    return '{:.3}{:.3}{:.3}'.format(leftTurn, speedStr, rightTurn)
+    return '{:.3}{:.3}{:.3}'.format(rightTurn, speedStr, leftTurn)
 
 
 def lcd( output ):
-    print('----------------')
-    print(output)
-    print('----------------')
+    global prev_lcd_msg
+    if output != prev_lcd_msg:
+        lcd_plate.clear()
+        lcd_plate.message(output)
+        prev_lcd_msg = output
+        print('----------------')
+        print(output)
+        print('----------------')
     
 
 def main():
@@ -160,7 +171,7 @@ def main():
         command = commandStr(fwd_speed, rot_speed)
 
         if has_pressed_a_key:
-            output = '|{:.4}| {:.9}\n________________'.format(mode, command)
+            output = '________________\n{:.9}_|{:.4}|'.format(command, mode)
             lcd(output)
         else:
             lcd('{:.16}\n{:.16}'.format(ssid, ipaddr))
